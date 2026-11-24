@@ -43,6 +43,9 @@ spec:
           args:
           - --metrics-addr=127.0.0.1:8080
           - --enable-leader-election
+          {{- with .Values.loadBalancerClass }}
+          - {{ printf "--load-balancer-class=%s" . | quote }}
+          {{- end }}
           securityContext:
             {{- toYaml .Values.securityContext | nindent 12 }}
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"

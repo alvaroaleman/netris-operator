@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 
+	k8sv1alpha1 "github.com/netrisai/netris-operator/api/v1alpha1"
 	"github.com/sirupsen/logrus"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -42,7 +43,18 @@ func getServices(clientset *kubernetes.Clientset, namespace string) (*v1.Service
 	return services, nil
 }
 
-func assignIngress(clientset *kubernetes.Clientset, ips []string, namespace string, name string) (*v1.Service, error) {
+func (w *Watcher) managesService(spec v1.ServiceSpec) bool {
+	if spec.Type != v1.ServiceTypeLoadBalancer {
+		return false
+	}
+	if w.Options.LoadBalancerClass == "" {
+		return spec.LoadBalancerClass == nil
+	}
+	return spec.LoadBalancerClass != nil && *spec.LoadBalancerClass == w.Options.LoadBalancerClass
+}
+
+func (w *Watcher) assignIngress(clientset *kubernetes.Clientset, ips []string, lb *k8sv1alpha1.L4LB) (*v1.Service, error) {
+	namespace, name := lb.GetServiceNamespace(), lb.GetServiceName()
 	ctx, cancel := context.WithTimeout(cntxt, contextTimeout)
 	defer cancel()
 
@@ -57,6 +69,10 @@ func assignIngress(clientset *kubernetes.Clientset, ips []string, namespace stri
 	service, err := clientset.CoreV1().Services(namespace).Get(ctx, name, metav1.GetOptions{})
 	if err != nil {
 		return updatedService, err
+	}
+
+	if !w.managesService(service.Spec) || string(service.UID) != lb.GetServiceUID() {
+		return nil, nil
 	}
 
 	service.Status = v1.ServiceStatus{LoadBalancer: v1.LoadBalancerStatus{Ingress: ingressList}}
@@ -83,7 +99,8 @@ func eventRecorder(kubeClient *kubernetes.Clientset) (record.EventRecorder, watc
 	return recorder, w, eventBroadcaster
 }
 
-func createEvent(clientset *kubernetes.Clientset, recorder record.EventRecorder, namespace, name, reason, message string) error {
+func (w *Watcher) createEvent(clientset *kubernetes.Clientset, recorder record.EventRecorder, lb *k8sv1alpha1.L4LB) error {
+	namespace, name := lb.GetServiceNamespace(), lb.GetServiceName()
 	ctx, cancel := context.WithTimeout(cntxt, contextTimeout)
 	defer cancel()
 	service, err := clientset.CoreV1().Services(namespace).Get(ctx, name, metav1.GetOptions{})
@@ -94,6 +111,10 @@ func createEvent(clientset *kubernetes.Clientset, recorder record.EventRecorder,
 		return nil
 	}
 
+	if !w.managesService(service.Spec) || string(service.UID) != lb.GetServiceUID() {
+		return nil
+	}
+
 	ref, err := reference.GetReference(scheme.Scheme, service)
 	if err != nil {
 		if client.IgnoreNotFound(err) != nil {
@@ -101,7 +122,7 @@ func createEvent(clientset *kubernetes.Clientset, recorder record.EventRecorder,
 		}
 		return nil
 	}
-	recorder.Event(ref, v1.EventTypeWarning, reason, message)
+	recorder.Event(ref, v1.EventTypeWarning, lb.Status.Status, lb.Status.Message)
 
 	return nil
 }

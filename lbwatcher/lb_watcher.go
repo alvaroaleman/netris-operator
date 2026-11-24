@@ -98,10 +98,14 @@ func getClientset() (*kubernetes.Clientset, error) {
 	return kubernetes.NewForConfig(ctrl.GetConfigOrDie())
 }
 
-func filterL4LBs(LBs []k8sv1alpha1.L4LB) []k8sv1alpha1.L4LB {
+// Persist ownership so cleanup can be scoped by class even after a Service is deleted.
+const loadBalancerClassAnnotation = "k8s.netris.ai/load-balancer-class"
+
+func (w *Watcher) filterL4LBs(LBs []k8sv1alpha1.L4LB) []k8sv1alpha1.L4LB {
 	lbList := []k8sv1alpha1.L4LB{}
 	for _, lb := range LBs {
-		if lb.GetServiceName() != "" && lb.GetServiceNamespace() != "" && lb.GetServiceUID() != "" {
+		if lb.Annotations[loadBalancerClassAnnotation] == w.Options.LoadBalancerClass &&
+			lb.GetServiceName() != "" && lb.GetServiceNamespace() != "" && lb.GetServiceUID() != "" {
 			lbList = append(lbList, lb)
 		}
 	}
@@ -123,10 +127,10 @@ func (w *Watcher) loadBalancerProcess(clientset *kubernetes.Clientset, cl client
 		return
 	}
 
-	filteerdL4LBs := filterL4LBs(l4lbs.Items)
+	filteredL4LBs := w.filterL4LBs(l4lbs.Items)
 
 	ipAuto := make(map[string]string)
-	for _, lb := range filteerdL4LBs {
+	for _, lb := range filteredL4LBs {
 		if uid := lb.GetServiceUID(); uid != "" {
 			ipAuto[uid] = lb.Spec.Frontend.IP
 		}
@@ -138,7 +142,7 @@ func (w *Watcher) loadBalancerProcess(clientset *kubernetes.Clientset, cl client
 		return
 	}
 
-	lbsToCreate, lbsToUpdate, lbsToDelete, ingressIPsMap := compareLoadBalancers(filteerdL4LBs, serviceLBs)
+	lbsToCreate, lbsToUpdate, lbsToDelete, ingressIPsMap := compareLoadBalancers(filteredL4LBs, serviceLBs)
 
 	js, _ := json.Marshal(lbsToCreate)
 	debugLogger.Info("Load balancers for create", "List", string(js))
@@ -170,16 +174,16 @@ func (w *Watcher) loadBalancerProcess(clientset *kubernetes.Clientset, cl client
 			for ip := range ingress {
 				ingressIPs = append(ingressIPs, ip)
 			}
-			_, err := assignIngress(clientset, ingressIPs, serviceLB.GetServiceNamespace(), serviceLB.GetServiceName())
+			_, err := w.assignIngress(clientset, ingressIPs, serviceLB)
 			if err != nil {
 				errors = append(errors, err)
 			}
 		}
 	}
 
-	for _, lb := range l4lbs.Items {
+	for _, lb := range filteredL4LBs {
 		if lb.Status.Status == "Failure" {
-			err := createEvent(clientset, recorder, lb.GetServiceNamespace(), lb.GetServiceName(), lb.Status.Status, lb.Status.Message)
+			err := w.createEvent(clientset, recorder, &lb)
 			if err != nil {
 				errors = append(errors, fmt.Errorf("{lbEventsPatcher} %s", err))
 			}
@@ -373,7 +377,7 @@ func (w *Watcher) generateLoadBalancers(clientset *kubernetes.Clientset, autoIPs
 	var siteName string
 
 	for _, svc := range serviceList.Items {
-		if svc.Spec.Type == "LoadBalancer" {
+		if w.managesService(svc.Spec) {
 			selectors := []string{}
 			hostIPs := map[string]int{}
 			for key, value := range svc.Spec.Selector {
@@ -477,6 +481,9 @@ func (w *Watcher) generateLoadBalancers(clientset *kubernetes.Clientset, autoIPs
 					lb.SetServiceUID(string(svc.GetUID()))
 					lb.SetServiceIngressIPs(ingressIPsString)
 					lb.SetImportFlag("true")
+					if w.Options.LoadBalancerClass != "" {
+						lb.Annotations[loadBalancerClassAnnotation] = w.Options.LoadBalancerClass
+					}
 
 					lbList = append(lbList, lb)
 				}

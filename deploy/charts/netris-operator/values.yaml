@@ -37,6 +37,9 @@ logLevel: info
 # Set the requeue interval in seconds for the netris-operator.
 requeueInterval: 15
 
+# Watch only Services with this load balancer class. Empty watches only classless Services.
+loadBalancerClass: ""
+
 # Set Nodes asn range. Used when Netris-Operator manages Calico CNI 
 calicoASNRange: 4230000000-4239999999
 

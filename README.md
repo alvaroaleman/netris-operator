@@ -29,6 +29,12 @@ Kubernetes manifests are located in the `deploy/` folder. To deploy the operator
 ### Helm Charts
 
 You can also use [Helm charts](./deploy/charts/netris-operator) to deploy Netris Operator.
+### Load balancer class
+
+By default, Netris only manages `type: LoadBalancer` Services that omit `spec.loadBalancerClass`. To manage a named class instead, set `--load-balancer-class=netris.ai/l4lb` (Helm: `loadBalancerClass: netris.ai/l4lb`) and set `spec.loadBalancerClass: netris.ai/l4lb` on the Services. The class must match exactly.
+
+On upgrade, existing Service-generated `L4LB` resources without the `k8s.netris.ai/load-balancer-class` annotation are treated as classless. If a Service already specifies the class you want Netris to manage, annotate its existing `L4LB` resources with that class before starting the upgraded operator so it can adopt them.
+
 ## Documentation
 Netris Operator managing resources samples are available in the `samples/` [folder](./samples/).
 

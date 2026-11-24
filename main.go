@@ -61,6 +61,8 @@ func init() {
 func main() {
 	var metricsAddr string
 	var enableLeaderElection bool
+	var loadBalancerClass string
+	flag.StringVar(&loadBalancerClass, "load-balancer-class", "", "Only watch LoadBalancer Services with this class. If empty, only watch Services with no class.")
 	flag.StringVar(&metricsAddr, "metrics-addr", ":8080", "The address the metric endpoint binds to.")
 	flag.BoolVar(&enableLeaderElection, "enable-leader-election", false,
 		"Enable leader election for controller manager. "+
@@ -366,7 +368,11 @@ func main() {
 		watcherLogLevel = "debug"
 	}
 
-	lbWatcher, err := lbwatcher.NewWatcher(nStorage, mgr, lbwatcher.Options{LogLevel: watcherLogLevel, RequeueInterval: configloader.Root.RequeueInterval})
+	lbWatcher, err := lbwatcher.NewWatcher(nStorage, mgr, lbwatcher.Options{
+		LogLevel:          watcherLogLevel,
+		RequeueInterval:   configloader.Root.RequeueInterval,
+		LoadBalancerClass: loadBalancerClass,
+	})
 	if err != nil {
 		setupLog.Error(err, "problem running lbwatcher")
 		os.Exit(1)

@@ -109,6 +109,7 @@ The following table lists the configurable parameters of the netris-operator cha
 | `controllerCreds.password.key`        | Netris controller password key in existing secret. Ignored if `controller.password` is set                    | `password`                 |
 | `logLevel`                            | Log level of netris-operator. Allowed values: `info` or `debug`                                               | `info`                     |
 | `requeueInterval`                     | Requeue interval in seconds for the netris-operator                                                           | `15`                       |
+| `loadBalancerClass`                   | Only manage LoadBalancer Services with this exact class. Empty manages only classless Services.                | `""`                       |
 | `calicoASNRange`                      | Set Nodes ASN range. Used when Netris-Operator manages Calico CNI                                             | `4230000000-4239999999`    |
 | `l4lbTenant`                          | Set the default Tenant for L4LB resources. If set, a tenant autodetection for L4LB resources will be disabled | `""`                       |
 | `vpcid`                               | Set the VPC ID (integer) where to create LB                                                                   | `1`                        |
