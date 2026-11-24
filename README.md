@@ -17,7 +17,11 @@
 
 
 ## Deploying the Operator
-The current version of netris-operator requires Kubernetes >= 1.16.
+The operator uses Kubernetes 1.37 client libraries. Compatibility with Kubernetes 1.16 has not been verified with these dependencies.
+
+When upgrading from a version that uses ConfigMaps for leader election, stop all old operator replicas before starting the upgraded operator. Apply the updated RBAC as part of the upgrade; ConfigMap and Lease locks do not coordinate with each other.
+
+In-cluster authentication still uses the pod’s service account. If you run the operator with a GKE kubeconfig that uses `auth-provider: gcp`, switch the kubeconfig to `gke-gcloud-auth-plugin`.
 
 ### GitOps
 Kubernetes manifests are located in the `deploy/` folder. To deploy the operator manually using Kubernetes manifests or to integrate it into your GitOps flow please follow [these instructions](./deploy/). 
